@@ -160,7 +160,7 @@ void liberar_SC() {
     nodos_pend = 0;
 }
 
-int main(int argc, char *argv[]){//este es el que usé para tickets
+int main(int argc, char *argv[]){//este es el que usé para testigo
     if(argc != 2){
 		printf("Uso: %s <Número de nodo>\n", argv[0]);
         return 1;
