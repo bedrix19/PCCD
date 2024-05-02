@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <limits.h>
+#include <string.h>
 
 #define MAX_PROCESOS 10
 #define MAX_NODOS 10
@@ -38,7 +39,7 @@ void *receiver(void *arg) {
     int *msqid = (int *)arg;
     printf("id:%d\n",*msqid);
     struct mssg_ticket mensaje;
-    size_t buf_length = sizeof(struct msgbuf) - sizeof(int); //tamaño del mensaje - mtype
+    size_t buf_length = sizeof(struct mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
 
     while (1) {
         if(msgrcv(*msqid, (void *)&mensaje, buf_length, 0, 0) < 0){
@@ -131,7 +132,7 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         vector_peticiones[num_proceso] = mi_ticket;
         // Preparamos las solicitudes
         struct mssg_ticket solicitud;
-        size_t buf_length = sizeof(struct msgbuf) - sizeof(int); //tamaño del mensaje - mtype
+        size_t buf_length = sizeof(struct mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
         solicitud.mtype = SOLICITUD;
         solicitud.id_nodo_origen = mi_id;
         solicitud.ticket_origen = mi_ticket;
@@ -149,7 +150,7 @@ void liberar_SC() {
     quiero = 0;
     // Preparamos las confirmaciones
     struct mssg_ticket confirmacion;
-    size_t buf_length = sizeof(struct msgbuf) - sizeof(int); //tamaño del mensaje - mtype
+    size_t buf_length = sizeof(struct mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
     solicitud.mtype = CONFIRMACION;
     solicitud.id_nodo_origen = mi_id;
     for (int i = 0; i < nodos_pend; i++) {
@@ -158,6 +159,125 @@ void liberar_SC() {
             printf("Error con msgsnd: %s\n", strerror(errno));
     }
     nodos_pend = 0;
+}
+
+void *lector(prioridad){}//aqui
+
+void *escritor(prioridad){}//aqui
+
+int main(int argc, char *argv[]){
+    if(argc != xd){
+        printf("Uso: %s <id_nodo> <xd>\n", argv[0]);
+        return 1;
+    }
+
+    pthread_t procesos_servidores[MAX_PROCESOS];
+    int msqid, proceso=0;
+    mi_id = atoi(argv[1]);
+
+    if ((msqid = msgget(1069+mi_id, msgflg | 0666)) < 0) printf("Error con msgget: %s\n", strerror(errno));
+
+    /******* Menú de opciones *******/
+    int opcion;
+    do {
+        // Muestra el menú de opciones
+        printf("\n\n\t\t\tMenu de Opciones\n");
+        printf("\t\t\t----------------\n");
+        printf("\t[1] Consultas\n");
+        printf("\t[2] Reservas\n");
+        printf("\t[3] Pagos\n");
+        printf("\t[4] Administración\n");
+        printf("\t[5] Anulaciones\n");
+
+        printf("\n\tIngrese una opcion: ");
+        scanf(" %d", &opcion);
+
+        switch (opcion) {
+            case 1: 
+                if ((hilo_recibidor=pthread_create(&hilo_lector, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                    printf("Error con pthread_create: %s\n", strerror(errno));
+                else printf("[%d] Consulta creada",proceso);
+                break;
+            case 2: 
+                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                    printf("Error con pthread_create: %s\n", strerror(errno));
+                else printf("[%d] Reserva creada",proceso);
+                break;
+            case 3: 
+                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                    printf("Error con pthread_create: %s\n", strerror(errno));
+                else printf("[%d] Pago creada",proceso);
+                break;
+            case 4: 
+                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                    printf("Error con pthread_create: %s\n", strerror(errno));
+                else printf("[%d] Administración creada",proceso);
+                break;
+            case 5: 
+                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                    printf("Error con pthread_create: %s\n", strerror(errno));
+                else printf("[%d] Anulaciones creada",proceso);
+                break;
+            default:
+                printf("Error con la elección");
+            
+        }proceso++;
+    }while (proceso<10);
+
+    while (1) {
+
+        sleep(1);
+
+        printf ("\n");
+        printf ("1. Introducir un proceso en la SC.\n");
+        //printf ("2. Quitar un proceso de la SC.\n");
+        printf ("3. Salir del programa.\n");
+        printf ("Elige una opcion: ");
+
+        scanf ("%i", &opcion);
+
+        switch (opcion) {
+
+            case 1:
+
+                printf ("Que hilo quire introducir en la Seccion Critica? ");
+                scanf ("%i", &opcion);
+
+                sem_post (&semaforoSincronizacion[opcion]);
+
+                break;
+
+            case 2:
+
+                printf ("Que hilo quire sacar de la Seccion Critica? ");
+                scanf ("%i", &opcion);
+
+                //sem_post (&semaforoSincronizacion[opcion + nHilos]);
+
+                break;                
+
+            case 3:
+
+                printf ("Cerrando programa.\n\n");
+                
+                do {
+
+                    error = msgctl (miID, IPC_RMID, NULL);
+
+                } while (error != 0);
+                
+                exit(1);
+
+                break;
+
+            default:
+
+                printf ("Opcion no contemplada.\n");
+                break;
+
+        }
+
+    }
 }
 
 int main(int argc, char *argv[]){//este es el que usé para testigo
@@ -171,8 +291,8 @@ int main(int argc, char *argv[]){//este es el que usé para testigo
     sem_init(&sem_testigo, 0, 1);
 
     pthread_t hilo_receptor;
-    struct msgbuf mensaje;
-    size_t msgsz = sizeof(struct msgbuf) - sizeof(int); //tamaño de (mtype + vector + nodoID) - mtype
+    struct mssg_ticket mensaje;
+    size_t msgsz = sizeof(struct mssg_ticket) - sizeof(int); //tamaño de (mtype + vector + nodoID) - mtype
     nodo = atoi(argv[1]);
     int mi_peticion = 0;
     int k=0;

@@ -66,7 +66,7 @@ int main (int argc, char* argv[]) {
     if (argc != 7) {
 
         printf ("\nError durante el inicio del programa. Argumentos de entrada incorrectos.\n");
-        printf ("%s claveKey_t numeroConsultas numeroReservas numeroPagos numeroAdmin numeroAnulaciones\n\n", argv[0]);
+        printf ("Uso: %s <claveKey_t> <numeroConsultas> <numeroReservas> <numeroPagos> <numeroAdmin> <numeroAnulaciones>\n\n", argv[0]);
 
         exit (-1);
 
@@ -169,7 +169,6 @@ int main (int argc, char* argv[]) {
         exit(-1);
 
     }
-
 
     for (int i = 0; i < (nUsuarios - 1); i++) {
 
