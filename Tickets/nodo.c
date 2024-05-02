@@ -161,9 +161,13 @@ void liberar_SC() {
     nodos_pend = 0;
 }
 
-void *lector(prioridad){}//aqui
+void *lector(prioridad, nro_proceso){
+    solicitar_SC(prioridad,nro_proceso,1)
+}//aqui
 
-void *escritor(prioridad){}//aqui
+void *escritor(prioridad, nro_proceso){
+    solicitar_SC(prioridad,nro_proceso,0)
+}//aqui
 
 int main(int argc, char *argv[]){
     if(argc != xd){
