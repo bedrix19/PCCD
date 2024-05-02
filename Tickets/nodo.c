@@ -72,7 +72,7 @@ void *receiver(void *arg) {
                 for(int i=0;i<MAX_PROCESOS;i++){
                     if(vector_peticiones[i]==mi_ticket){
                         flag_pedir_otra_vez[i] = 1;
-                        sem_post(semaforos_de_paso[i]); //lo despertamos pero debe pedir otra vez
+                        sem_post(semaforos_de_paso[i]); //lo despertamos pero debe pedir otra vez a todos
                     }
                 }
             } else if (mensaje.prioridad_origen == mi_prioridad && (mensaje.ticket_origen < mi_ticket || (mensaje.ticket_origen == mi_ticket && mensaje.id_nodo_origen < mi_id))) {
@@ -161,31 +161,47 @@ void liberar_SC() {
     nodos_pend = 0;
 }
 
-void *lector(prioridad, nro_proceso){
+void *lector(prioridad, nro_proceso, sem_sinc){
     solicitar_SC(prioridad,nro_proceso,1)
 }//aqui
 
-void *escritor(prioridad, nro_proceso){
+void *escritor(prioridad, nro_proceso, sem_sinc){
     solicitar_SC(prioridad,nro_proceso,0)
 }//aqui
 
 int main(int argc, char *argv[]){
     if(argc != xd){
         printf("Uso: %s <id_nodo> <xd>\n", argv[0]);
+        printf("Primer nodo = 0 y el último = %d",MAX_NODOS);
         return 1;
     }
 
-    pthread_t procesos_servidores[MAX_PROCESOS];
-    int msqid, proceso=0;
     mi_id = atoi(argv[1]);
 
-    if ((msqid = msgget(1069+mi_id, msgflg | 0666)) < 0) printf("Error con msgget: %s\n", strerror(errno));
+    //incializar las variables para el intercambio de mensajes
+    int msqid_nodos[MAX_NODOS];
+    if ((msqid_nodos[mi_id] = msgget(1069+mi_id, IPC_CREAT | IPC_EXCL | 0666)) < 0) printf("Error con msgget: %s\n", strerror(errno));
+    printf("Pulsa ENTER cuando todos los nodos estén inicializados\n", nodo);
+    while(!getchar());
+    for(int i=0;i<MAX_NODOS;i++){
+        if(i==mi_id)continue;
+        msqid_nodos[i] = msgget(1069+i, 0666); // Colas de mensajes de los nodos
+    }
 
-    /******* Menú de opciones *******/
-    int opcion;
+    //inicializar semaforos para sincronizar procesos servidor
+    sem_t sem_solicitar_SC[MAX_PROCESOS];
+    for(int i=0;i<MAX_PROCESOS;i++){
+        if(sem_init(&sem_solicitar_SC[i],0,0)==-1)
+            printf("Error con semáforo de paso inicial lector: %s\n", strerror(errno));
+    }
+
+    //inicializar los procesos servidores
+    pthread_t hilos_servidores[MAX_PROCESOS];
+    int opcion, proceso=0;
     do {
-        // Muestra el menú de opciones
-        printf("\n\n\t\t\tMenu de Opciones\n");
+        sleep(1);
+        /******* Menú de opciones *******/
+        printf("\n\n\t\t\tMenu de Procesos\n");
         printf("\t\t\t----------------\n");
         printf("\t[1] Consultas\n");
         printf("\t[2] Reservas\n");
@@ -198,29 +214,29 @@ int main(int argc, char *argv[]){
 
         switch (opcion) {
             case 1: 
-                if ((hilo_recibidor=pthread_create(&hilo_lector, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                if ((pthread_create(&hilos_servidores[proceso], NULL, lector, args)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("[%d] Consulta creada",proceso);
+                else printf("[%d] Consulta creado",proceso);
                 break;
             case 2: 
-                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, args)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("[%d] Reserva creada",proceso);
+                else printf("[%d] Reserva creado",proceso);
                 break;
             case 3: 
-                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, args)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("[%d] Pago creada",proceso);
+                else printf("[%d] Pago creado",proceso);
                 break;
             case 4: 
-                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, args)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("[%d] Administración creada",proceso);
+                else printf("[%d] Administración creado",proceso);
                 break;
             case 5: 
-                if ((hilo_recibidor=pthread_create(&hilo_escritor, NULL, receptor, &msqid_nodos[nodo-1])) < 0)//aqui
+                if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, args)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("[%d] Anulaciones creada",proceso);
+                else printf("[%d] Anulaciones creado",proceso);
                 break;
             default:
                 printf("Error con la elección");
@@ -228,8 +244,13 @@ int main(int argc, char *argv[]){
         }proceso++;
     }while (proceso<10);
 
-    while (1) {
+    //inicializamos el receiver
+    pthread_t hilo_receptor;
+    if ((pthread_create(&hilo_receptor, NULL, receiver, msqid_nodos[mi_id])) < 0)
+        printf("Error con pthread_create: %s\n", strerror(errno));
+    else printf("Receiver creado",proceso);
 
+    while (1) {
         sleep(1);
 
         printf ("\n");
@@ -243,140 +264,24 @@ int main(int argc, char *argv[]){
         switch (opcion) {
 
             case 1:
-
                 printf ("Que hilo quire introducir en la Seccion Critica? ");
                 scanf ("%i", &opcion);
-
-                sem_post (&semaforoSincronizacion[opcion]);
-
+                sem_post (&sem_solicitar_SC[opcion]);
                 break;
-
             case 2:
-
                 printf ("Que hilo quire sacar de la Seccion Critica? ");
                 scanf ("%i", &opcion);
-
                 //sem_post (&semaforoSincronizacion[opcion + nHilos]);
-
-                break;                
-
-            case 3:
-
-                printf ("Cerrando programa.\n\n");
-                
-                do {
-
-                    error = msgctl (miID, IPC_RMID, NULL);
-
-                } while (error != 0);
-                
-                exit(1);
-
                 break;
-
+            case 3:
+                printf ("Cerrando programa.\n\n");
+                if(msgctl(miID, IPC_RMID, NULL) < 0){
+                    printf("Error con msgctl: %s\n", strerror(errno));
+                    exit(1);
+                }else return 0;
             default:
-
                 printf ("Opcion no contemplada.\n");
                 break;
-
         }
-
     }
-}
-
-int main(int argc, char *argv[]){//este es el que usé para testigo
-    if(argc != 2){
-		printf("Uso: %s <Número de nodo>\n", argv[0]);
-        return 1;
-	}
-    // Inicializar semáforos
-    sem_init(&sem_vector_peticiones, 0, 1);
-    sem_init(&sem_vector_atendidas, 0, 1);
-    sem_init(&sem_testigo, 0, 1);
-
-    pthread_t hilo_receptor;
-    struct mssg_ticket mensaje;
-    size_t msgsz = sizeof(struct mssg_ticket) - sizeof(int); //tamaño de (mtype + vector + nodoID) - mtype
-    nodo = atoi(argv[1]);
-    int mi_peticion = 0;
-    int k=0;
-
-    // Intentar obtener el token
-    int msqid_token = msgget(1069, 0666); // Cola de mensajes del token
-    if (msgrcv(msqid_token, &mensaje, msgsz, 1, IPC_NOWAIT) < 0) {
-        if (errno == ENOMSG) {
-            printf("No hay token.\n");
-            testigo = 0;
-        } else {
-            perror("msgrcv");
-            return -1;
-        }
-    }else{
-        printf("Tengo el token.\n");
-        testigo = 1;
-    }
-
-    // Almacena los ids
-    for(int i=0;i<N;i++) msqid_nodos[i] = msgget(1069+i+1, 0666); // Colas de mensajes de los nodos
-
-    // Lanzar el hilo del recibidor de solicitudes
-    int hilo_recibidor;
-    if ((hilo_recibidor=pthread_create(&hilo_receptor, NULL, receiver, &msqid_nodos[nodo-1])) < 0) printf("Error con pthread_create: %s\n", strerror(errno));
-
-    // Bucle del nodo
-    while(1){
-        printf("Pulsa enter para intentar entrar a la sección critica\n");
-        fflush(stdout);
-        while(!getchar());
-        printf("Intentando entrar a la SC...\n");
-        fflush(stdout);
-
-        if(!testigo){
-            mensaje.mtype = 2;
-            mensaje.vector[nodo-1] = ++mi_peticion;
-            mensaje.nodoID = nodo;
-            for(int i=0;i<N;i++){
-                if(i+1 == nodo) continue;
-                if (msgsnd(msqid_nodos[i], &mensaje, msgsz, IPC_NOWAIT) < 0){
-                    printf("Error con msgsnd: %s\n", strerror(errno));
-                    return -1;
-                }
-                else printf("Solicitud enviada al nodo %d.\n",i+1);
-            }
-            printf("Esperando recibir el testigo..\n");
-            if (msgrcv(msqid_nodos[nodo-1], &mensaje, msgsz, 1, 0) < 0){
-                printf("Error con msgrcv: %s\n", strerror(errno));
-                return -1;
-            }
-            testigo=1;
-        }
-
-        dentro = 1;
-        printf("En la seccion critica, pulsa ENTER para salir\n");
-        fflush(stdout);
-        while(!getchar());
-        mensaje.vector[nodo]=mi_peticion;
-        dentro = 0;
-
-        k++;
-        for(int i=k;i<N;i++){
-            if(vector_atendidas[i]<vector_peticiones[i]){
-                if (msgsnd(msqid_nodos[i], &mensaje, msgsz, IPC_NOWAIT) < 0)
-                    printf("Error con msgsnd: %s\n", strerror(errno));
-                break;
-            }
-        }
-        for(int i=0;i<k;i++){
-            if(vector_atendidas[i]<vector_peticiones[i]){
-                if (msgsnd(msqid_nodos[i], &mensaje, msgsz, IPC_NOWAIT) < 0)
-                    printf("Error con msgsnd: %s\n", strerror(errno));
-                break;
-            }
-        }
-        printf("Fuera de la sección crítica.\n");
-        fflush(stdout);
-    }
-    if(pthread_join(hilo_recibidor,NULL) != 0)
-            perror("Error al unirse el thread");
-    return 0;
 }
