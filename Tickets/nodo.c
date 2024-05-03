@@ -28,11 +28,13 @@ int mi_prioridad = 0;
 int quiero = 0;
 int SC_consultas;
 int vector_peticiones[MAX_PROCESOS];
-sem_t semaforos_de_paso[MAX_PROCESOS];
 int flag_pedir_otra_vez[MAX_PROCESOS] = {0};
-int nodos_pend = 0;
-int id_nodos_pend[MAX_NODOS];
-int ticket_nodos_pend[MAX_NODOS];
+int nodos_pendientes_count;
+int *id_nodos_pend = NULL;
+int *ticket_nodos_pend = NULL;
+
+sem_t semaforos_de_paso[MAX_PROCESOS];
+sem_t sem_esperando_pedir_SC[3];
 
 void *receiver(void *arg) {
 
@@ -41,10 +43,23 @@ void *receiver(void *arg) {
     struct mssg_ticket mensaje;
     size_t buf_length = sizeof(struct mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
 
+    //variables para almacenar las solicitudes
+    int capacidad = MAX_NODOS; // Capacidad inicial del vector
+    nodos_pendientes_count = 0;
+
+    if ((id_nodos_pend = (int *)malloc(capacidad * sizeof(int))) == NULL) {//asignar la memoria para el vector de ids
+        printf("Error al asignar memoria.\n");
+        exit(1);
+    }
+    if ((ticket_nodos_pend = (int *)malloc(capacidad * sizeof(int))) == NULL) {//asignar la memoria para el vector de tickets
+        printf("Error al asignar memoria.\n");
+        exit(1);
+    }
+
     while (1) {
         if(msgrcv(*msqid, (void *)&mensaje, buf_length, 0, 0) < 0){
             printf("Error con msgrcv: %s\n", strerror(errno));
-            exit(-1);
+            exit(1);
         }
         max_ticket = MAX(max_ticket, mensaje.ticket_origen);
 
@@ -84,14 +99,20 @@ void *receiver(void *arg) {
                     printf("Error con msgsnd: %s\n", strerror(errno));
             } else {
                 // Aquí se implementa la lógica de almacenamiento de nodos pendientes
-                if (nodos_pend < MAX_NODOS) {
-                    id_nodos_pend[nodos_pend] = mensaje.id_nodo_origen;
-                    ticket_nodos_pend[nodos_pend] = mensaje.ticket_origen;
-                    nodos_pend++;
-                } else {
-                    // Manejar el caso en que se excede el límite de nodos pendientes
-                    printf("Error: Se ha excedido el límite de nodos pendientes.\n");
-                }
+                if(nodos_pendientes_count >= capacidad){
+                    capacidad = capacidad + MAX_NODOS;
+                    if ((id_nodos_pend = (int *)realloc(nodos_pendientes, capacidad * sizeof(int))) == NULL) {//aumentamos la memoria
+                        printf("Error al asignar memoria.\n");
+                        exit(1);
+                    }
+                    if ((ticket_nodos_pend = (int *)realloc(nodos_pendientes, capacidad * sizeof(int))) == NULL) {//aumentamos la memoria
+                        printf("Error al asignar memoria.\n");
+                        exit(1);
+                    }
+                }  
+                id_nodos_pend[nodos_pendientes_count] = mensaje.id_nodo_origen;
+                ticket_nodos_pend[nodos_pendientes_count] = mensaje.ticket_origen;
+                nodos_pendientes_count++;
             }
         } else if (estoy_SC && mensaje.flag_consulta && SC_consultas) {
             // Aquí se implementa el envío de confirmación para una peticion para una Consulta
@@ -102,14 +123,20 @@ void *receiver(void *arg) {
                 printf("Error con msgsnd: %s\n", strerror(errno));
         } else {
             // Aquí se implementa la lógica de almacenamiento de nodos pendientes
-            if (nodos_pend < MAX_NODOS) {
-                id_nodos_pend[nodos_pend] = mensaje.id_nodo_origen;
-                ticket_nodos_pend[nodos_pend] = mensaje.ticket_origen;
-                nodos_pend++;
-            } else {
-                // Manejar el caso en que se excede el límite de nodos pendientes
-                printf("Error: Se ha excedido el límite de nodos pendientes.\n");
-            }
+            if(nodos_pendientes_count >= capacidad){
+                capacidad = capacidad + MAX_NODOS;
+                if ((id_nodos_pend = (int *)realloc(nodos_pendientes, capacidad * sizeof(int))) == NULL) {//aumentamos la memoria
+                    printf("Error al asignar memoria.\n");
+                    exit(1);
+                }
+                if ((ticket_nodos_pend = (int *)realloc(nodos_pendientes, capacidad * sizeof(int))) == NULL) {//aumentamos la memoria
+                    printf("Error al asignar memoria.\n");
+                    exit(1);
+                }
+            }  
+            id_nodos_pend[nodos_pendientes_count] = mensaje.id_nodo_origen;
+            ticket_nodos_pend[nodos_pendientes_count] = mensaje.ticket_origen;
+            nodos_pendientes_count++;
         }
     }
 }
@@ -127,7 +154,12 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
     do {
         quiero = 1;
         if (prioridad_solicitud > mi_prioridad) mi_prioridad = prioridad;
-        else while (quiero && !estoy_SC);
+        // else while (quiero && !estoy_SC); //espera activa
+        else{
+            flag_esperando_para_pedir_SC[prioridad_solicitud-1]=1;
+            sem_wait(&sem_esperando_pedir_SC[prioridad_solicitud-1]);
+            flag_esperando_para_pedir_SC[prioridad_solicitud-1]=0;
+        }
         mi_ticket = max_ticket + 1;
         vector_peticiones[num_proceso] = mi_ticket;
         // Preparamos las solicitudes
@@ -144,21 +176,31 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         }
         sem_wait(&semaforos_de_paso[num_proceso]);
     } while (flag_pedir_otra_vez[num_proceso]);
+    quiero = 0;
 }
 
 void liberar_SC() {
-    quiero = 0;
+    //quiero = 0;
+
+    //Comprobar si hay procesos esperando por solicitar SC
+    for(int i = 3,i>0,i--){
+        if(flag_esperando_para_pedir_SC[i-1]){
+            sem_post(&sem_esperando_pedir_SC[i-1]);
+            break;
+        }
+    }
+
     // Preparamos las confirmaciones
     struct mssg_ticket confirmacion;
     size_t buf_length = sizeof(struct mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
     solicitud.mtype = CONFIRMACION;
     solicitud.id_nodo_origen = mi_id;
-    for (int i = 0; i < nodos_pend; i++) {
+    for (int i = 0; i < nodos_pendientes_count; i++) {
         solicitud.ticket_origen = ticket_nodos_pend[i];
         if (msgsnd(id_nodos_pend[i], &mensaje, msgsz, IPC_NOWAIT) < 0)
             printf("Error con msgsnd: %s\n", strerror(errno));
     }
-    nodos_pend = 0;
+    nodos_pendientes_count = 0;
 }
 
 void *lector(prioridad, nro_proceso, sem_sinc){
@@ -192,7 +234,7 @@ int main(int argc, char *argv[]){
     sem_t sem_solicitar_SC[MAX_PROCESOS];
     for(int i=0;i<MAX_PROCESOS;i++){
         if(sem_init(&sem_solicitar_SC[i],0,0)==-1)
-            printf("Error con semáforo de paso inicial lector: %s\n", strerror(errno));
+            printf("Error con semáforo de paso para servidores: %s\n", strerror(errno));
     }
 
     //inicializar los procesos servidores
@@ -250,6 +292,7 @@ int main(int argc, char *argv[]){
         printf("Error con pthread_create: %s\n", strerror(errno));
     else printf("Receiver creado",proceso);
 
+    //menú para pedir SC
     while (1) {
         sleep(1);
 
@@ -275,6 +318,8 @@ int main(int argc, char *argv[]){
                 break;
             case 3:
                 printf ("Cerrando programa.\n\n");
+                free(id_nodos_pend);
+                free(ticket_nodos_pend);
                 if(msgctl(miID, IPC_RMID, NULL) < 0){
                     printf("Error con msgctl: %s\n", strerror(errno));
                     exit(1);
