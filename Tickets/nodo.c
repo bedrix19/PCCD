@@ -4,6 +4,10 @@
 #include <semaphore.h>
 #include <limits.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
+
+
 
 #define MAX_PROCESOS 10
 #define MAX_NODOS 10
@@ -17,6 +21,17 @@ typedef mssg_ticket {
     int prioridad_origen;
     int flag_consulta;
 };
+
+//Struct para pasarle parámetros a los procesos Escritores
+struct arg_escritor {
+    int prioridad;
+    int nro_proceso;
+} *argsEscritores;
+
+struct arg_lector {
+    int prioridad;
+    int nro_proceso;
+} *argsLectores;
 
 int confirmaciones = 0;
 int num_nodos;
@@ -32,9 +47,14 @@ int flag_pedir_otra_vez[MAX_PROCESOS] = {0};
 int nodos_pendientes_count;
 int *id_nodos_pend = NULL;
 int *ticket_nodos_pend = NULL;
+int flagConsultasSC = 0;
+int contadorLectores = 0;
+
 
 sem_t semaforos_de_paso[MAX_PROCESOS];
 sem_t sem_esperando_pedir_SC[3];
+sem_t sem_exclusionMutuaEscritor;
+sem_t sem_ProtegeLectores;
 
 void *receiver(void *arg) {
 
@@ -183,7 +203,7 @@ void liberar_SC() {
     //quiero = 0;
 
     //Comprobar si hay procesos esperando por solicitar SC
-    for(int i = 3,i>0,i--){
+    for(int i = 3;i>0;i--){
         if(flag_esperando_para_pedir_SC[i-1]){
             sem_post(&sem_esperando_pedir_SC[i-1]);
             break;
@@ -203,13 +223,45 @@ void liberar_SC() {
     nodos_pendientes_count = 0;
 }
 
-void *lector(prioridad, nro_proceso, sem_sinc){
-    solicitar_SC(prioridad,nro_proceso,1)
-}//aqui
+void *lector(void *threadArgs){
+    //args: prioridad, nro_proceso, sem_sinc
+    struct arg_lector *args = threadArgs;
+    int prioridad = args->prioridad;
+    int nro_proceso = args->nro_proceso;
+    sem_wait(&semaforos_de_paso[nro_proceso]);
+    solicitar_SC(prioridad,nro_proceso,1);
+    sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
+    flagConsultasSC = 1;
+    contadorLectores ++;
+    sem_post(&sem_ProtegeLectores);
+    sleep(5);
+    liberar_SC();
+    sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
+    contadorLectores --;
+    if (contadorLectores == 0){
+        flagConsultasSC = 0;
+    }
+    sem_post(&sem_ProtegeLectores);
+    //sem_wait(&semaforos_de_paso[nro_proceso]);
 
-void *escritor(prioridad, nro_proceso, sem_sinc){
-    solicitar_SC(prioridad,nro_proceso,0)
-}//aqui
+}
+
+void *escritor(void *threadArgs){
+    struct arg_escritor *args = threadArgs;
+    int prioridad = args->prioridad;
+    int nro_proceso = args->nro_proceso;
+    sem_wait(&semaforos_de_paso[nro_proceso]);                      //Esperamos a que nos den paso desde el main
+    if (prioridad == 1) sem_wait(&sem_esperando_pedir_SC[0]);
+    else if(prioridad == 2) sem_wait(&sem_esperando_pedir_SC[1]);
+    else if(prioridad == 3) sem_wait(&sem_esperando_pedir_SC[2]);
+    sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
+    solicitar_SC(prioridad,nro_proceso,0);
+    sleep(5);
+    liberar_SC();
+    if (prioridad == 1) sem_post(&sem_esperando_pedir_SC[0]);
+    else if(prioridad == 2) sem_post(&sem_esperando_pedir_SC[1]);
+    else if(prioridad == 3) sem_post(&sem_esperando_pedir_SC[2]);
+}
 
 int main(int argc, char *argv[]){
     if(argc != xd){
