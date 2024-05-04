@@ -225,42 +225,51 @@ void liberar_SC() {
 
 void *lector(void *threadArgs){
     //args: prioridad, nro_proceso, sem_sinc
-    struct arg_lector *args = threadArgs;
-    int prioridad = args->prioridad;
-    int nro_proceso = args->nro_proceso;
-    sem_wait(&semaforos_de_paso[nro_proceso]);
-    solicitar_SC(prioridad,nro_proceso,1);
-    sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
-    flagConsultasSC = 1;
-    contadorLectores ++;
-    sem_post(&sem_ProtegeLectores);
-    sleep(5);
-    liberar_SC();
-    sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
-    contadorLectores --;
-    if (contadorLectores == 0){
-        flagConsultasSC = 0;
+    while(1){
+        struct arg_lector *args = threadArgs;
+        int prioridad = args->prioridad;
+        int nro_proceso = args->nro_proceso;
+        sem_wait(&semaforos_de_paso[nro_proceso]);
+        printf("[Proceso %d]=>Pidiendo SC...\n", nro_proceso);
+        solicitar_SC(prioridad,nro_proceso,1);
+        printf("[Proceso %d]=>Dentro de SC...\n", nro_proceso);
+        sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
+        flagConsultasSC = 1;
+        contadorLectores ++;
+        sem_post(&sem_ProtegeLectores);
+        sleep(5);
+        liberar_SC();
+        printf("[Proceso %d]=>Saliendo SC...\n", nro_proceso);
+        sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de flagConsultasSC en exclusión mutua
+        contadorLectores --;
+        if (contadorLectores == 0){
+            flagConsultasSC = 0;
+        }
+        sem_post(&sem_ProtegeLectores);
+        //sem_wait(&semaforos_de_paso[nro_proceso]);
     }
-    sem_post(&sem_ProtegeLectores);
-    //sem_wait(&semaforos_de_paso[nro_proceso]);
-
 }
 
 void *escritor(void *threadArgs){
-    struct arg_escritor *args = threadArgs;
-    int prioridad = args->prioridad;
-    int nro_proceso = args->nro_proceso;
-    sem_wait(&semaforos_de_paso[nro_proceso]);                      //Esperamos a que nos den paso desde el main
-    if (prioridad == 1) sem_wait(&sem_esperando_pedir_SC[0]);
-    else if(prioridad == 2) sem_wait(&sem_esperando_pedir_SC[1]);
-    else if(prioridad == 3) sem_wait(&sem_esperando_pedir_SC[2]);
-    sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
-    solicitar_SC(prioridad,nro_proceso,0);
-    sleep(5);
-    liberar_SC();
-    if (prioridad == 1) sem_post(&sem_esperando_pedir_SC[0]);
-    else if(prioridad == 2) sem_post(&sem_esperando_pedir_SC[1]);
-    else if(prioridad == 3) sem_post(&sem_esperando_pedir_SC[2]);
+    while(1){
+        struct arg_escritor *args = threadArgs;
+        int prioridad = args->prioridad;
+        int nro_proceso = args->nro_proceso;
+        sem_wait(&semaforos_de_paso[nro_proceso]);                      //Esperamos a que nos den paso desde el main
+        printf("[Proceso %d]=>Pidiendo SC...\n", nro_proceso);
+        if (prioridad == 1) sem_wait(&sem_esperando_pedir_SC[0]);
+        else if(prioridad == 2) sem_wait(&sem_esperando_pedir_SC[1]);
+        else if(prioridad == 3) sem_wait(&sem_esperando_pedir_SC[2]);
+        sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
+        solicitar_SC(prioridad,nro_proceso,0);
+        printf("[Proceso %d]=>Dentro de SC...\n", nro_proceso);
+        sleep(5);
+        liberar_SC();
+        printf("[Proceso %d]=>Saliendo de SC...\n", nro_proceso);
+        if (prioridad == 1) sem_post(&sem_esperando_pedir_SC[0]);
+        else if(prioridad == 2) sem_post(&sem_esperando_pedir_SC[1]);
+        else if(prioridad == 3) sem_post(&sem_esperando_pedir_SC[2]);
+    }
 }
 
 int main(int argc, char *argv[]){
