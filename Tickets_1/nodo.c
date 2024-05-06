@@ -48,6 +48,7 @@ int mi_prioridad = 0;
 int vector_peticiones[NUM_PRIORIDADES] = {0};   //ya esta protegido por el semaforo de tickets
 //int vector_peticiones[MAX_PROCESOS];
 int flag_pedir_otra_vez[NUM_PRIORIDADES] = {0};
+int flag_esperando_confirmacion[NUM_PRIORIDADES] = {0};
 //int flag_pedir_otra_vez[MAX_PROCESOS] = {0};
 int nodos_pendientes_count;
 int *id_nodos_pend = NULL;  //ya esta protegido por el semaforo de nodos_pendientes_count
@@ -98,6 +99,10 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         sem_wait(&sem_mi_prioridad);
         printf("\n[Proceso %d]=>prioridad actual: %d\n",num_proceso, mi_prioridad);
         if (prioridad_solicitud > mi_prioridad){
+            if(mi_prioridad!=0) {
+                flag_pedir_otra_vez[mi_prioridad-1]=1;
+                sem_post(&semaforos_de_paso[mi_prioridad-1]);
+            }
             mi_prioridad = prioridad_solicitud;
             sem_post(&sem_mi_prioridad);
         } else {
@@ -127,6 +132,7 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         }
         sem_post(&sem_tickets);
 
+        //flag_esperando_confirmacion[prioridad_solicitud-1]=1;
         sem_wait(&semaforos_de_paso[prioridad_solicitud-1]); // Esperamos a que dar_SC nos de el paso
 
         sem_wait(&sem_flag_pedir_again);
