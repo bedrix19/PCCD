@@ -45,6 +45,7 @@ int quiero = 0;
 int max_ticket = 0;
 int mi_ticket = 0;
 int mi_prioridad = 0;
+int confirmaciones = 0;
 int vector_peticiones[NUM_PRIORIDADES] = {0};   //ya esta protegido por el semaforo de tickets
 //int vector_peticiones[MAX_PROCESOS];
 int flag_pedir_otra_vez[NUM_PRIORIDADES] = {0};
@@ -96,14 +97,15 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         quiero = 1;
         sem_post(&sem_estoy_SC_y_quiero);
 
-        sem_wait(&sem_mi_prioridad);
+        sem_wait(&sem_mi_prioridad); printf("\n[Proceso %d]=> paso sem_mi_prioridad\n",num_proceso);
         printf("\n[Proceso %d]=>prioridad actual: %d\n",num_proceso, mi_prioridad);
         if (prioridad_solicitud > mi_prioridad){
             if(mi_prioridad!=0) {
+                confirmaciones = 0;
                 flag_pedir_otra_vez[mi_prioridad-1]=1;
                 sem_post(&semaforos_de_paso[mi_prioridad-1]);
             }
-            mi_prioridad = prioridad_solicitud;
+            mi_prioridad = prioridad_solicitud; printf("\n[Proceso %d]=> mi_prioridad: %d\n",num_proceso,mi_prioridad);
             sem_post(&sem_mi_prioridad);
         } else {
             sem_post(&sem_mi_prioridad);
@@ -185,7 +187,7 @@ void *receiver(void *arg) {
     size_t buf_length = sizeof(mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
 
     //variables para contar las confirmaciones que recibimos y entrar en SC
-    int confirmaciones = 0;
+    confirmaciones = 0;
 
     //variables para almacenar las solicitudes
     int capacidad = MAX_NODOS; // Capacidad inicial del vector
@@ -373,9 +375,9 @@ void *escritor(void *threadArgs){
         sem_wait(&sem_solicitar_SC[nro_proceso]);                      //Esperamos a que nos den paso desde el main
         printf("\n[Proceso %d]=>Pidiendo SC...\n", nro_proceso);
         sem_wait(&sem_exclusion_peticiones[prioridad-1]);
-        sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
         solicitar_SC(nro_proceso,prioridad,0);
         sem_post(&sem_exclusion_peticiones[prioridad-1]);
+        sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
         printf("\n[Proceso %d]=>Dentro de SC...\n", nro_proceso);
         sleep(7);
         liberar_SC();
@@ -429,7 +431,7 @@ int main(int argc, char *argv[]){
 
     //inicializar semaforos de sincronizacion cuando queremos pedir SC pero debemos esperar
     for(int i=0;i<NUM_PRIORIDADES;i++){
-        if(sem_init(&sem_esperando_pedir_SC[i],0,1)==-1)
+        if(sem_init(&sem_esperando_pedir_SC[i],0,0)==-1)
             printf("Error con semáforo de paso para servidores: %s\n", strerror(errno));
     }
 
