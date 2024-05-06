@@ -178,7 +178,7 @@ void liberar_SC() {
         confirmacion.mtype = CONFIRMACION;
         confirmacion.id_nodo_origen = mi_id;
             for (int i = 0; i < nodos_pendientes_count; i++) {
-                printf("\n\tConfirmamos al ticket: %d del nodo: %d",ticket_nodos_pend[i],id_nodos_pend[i]);
+                printf("\n\tConfirmamos al nodo %d con ticket %d",id_nodos_pend[i],ticket_nodos_pend[i]);
                 confirmacion.ticket_origen = ticket_nodos_pend[i];
                 if (msgsnd(msqid_nodos[id_nodos_pend[i]], &confirmacion, buf_length, IPC_NOWAIT) < 0) {
                     printf("\nid del nodo: %d",id_nodos_pend[i]);
@@ -225,11 +225,11 @@ void *receiver(void *arg) {
                 printf("\nRecibí una solicitud con ticket igual a %d\n",mensaje.ticket_origen);
             }
             if(mensaje.mtype == CONFIRMACION) {
-                printf("\nRecibí una confirmacion con ticket igual a %d\n",mensaje.ticket_origen);
+                //printf("\nRecibí una confirmacion con ticket igual a %d\n",mensaje.ticket_origen);
             }
         }
-        sem_wait(&sem_tickets);  //printf("paso sem_tickets ");
-        sem_wait(&sem_mi_prioridad); //printf("paso sem_mi_prioridad ");
+        sem_wait(&sem_tickets);  printf("paso sem_tickets ");
+        sem_wait(&sem_mi_prioridad); printf("paso sem_mi_prioridad ");
         max_ticket = MAX(max_ticket, mensaje.ticket_origen);
         if (mensaje.mtype == CONFIRMACION && mensaje.ticket_origen == mi_ticket) {
             printf("\n\tMe confirmó el nodo %d con ticket %d",mensaje.id_nodo_origen,mensaje.ticket_origen);
@@ -260,27 +260,24 @@ void *receiver(void *arg) {
             continue;
         }
         
-        sem_wait(&sem_estoy_SC_y_quiero); //printf("paso sem_estoy_SC_y_quiero ");
+        sem_wait(&sem_estoy_SC_y_quiero); printf("paso sem_estoy_SC_y_quiero ");
         //sem_wait(&sem_tickets);
         //sem_wait(&sem_mi_prioridad);
-        sem_wait(&sem_ProtegeLectores); //printf("paso sem_ProtegeLectores ");
-        if (mensaje.mtype == SOLICITUD && !quiero) {
-            //printf("Respondemos, porque no queremos SC.\n");
+        sem_wait(&sem_ProtegeLectores); printf("paso sem_ProtegeLectores ");
+        if (mensaje.mtype == SOLICITUD && !quiero) {//printf("Respondemos, porque no queremos SC.\n");
             mensaje.mtype = CONFIRMACION;
             mensaje.id_nodo_origen = mi_id;
             // mensaje.ticket_origen = mensaje.ticket_origen;
             if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                 printf("\nError con msgsnd respondiendo a una solicitud: %s\n", strerror(errno));
         } else if (mensaje.mtype == SOLICITUD && quiero && !estoy_SC) {
-            if (mensaje.prioridad_origen > mi_prioridad) {
-                //printf("Respondemos, porque tiene una prioridad mayor.\n");
+            if (mensaje.prioridad_origen > mi_prioridad) {//printf("Respondemos, porque tiene una prioridad mayor.\n");
                 // Aquí se implementa el envío de confirmación para una peticion mas prioritaria
                 mensaje.mtype = CONFIRMACION;
                 mensaje.id_nodo_origen = mi_id;
                 // mensaje.ticket_origen = mensaje.ticket_origen;
                 if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                     //printf("\nError con msgsnd respondiendo a una solicitud más prioritaria: %s\n", strerror(errno));
-
                 // como es una solicitud con prioridad mayor debemos enviar el nuestro otra vez
                 sem_wait(&sem_flag_pedir_again);
                 for(int i=0;i<NUM_PRIORIDADES;i++){
@@ -385,7 +382,7 @@ void *lector(void *threadArgs){
 
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
             contadorLectores--;
-            sem_wait(&sem_procesos_permitidos_en_SC);
+            sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
             procesos_permitidos_en_SC--;
             if (contadorLectores == 0){
                 //printf("\nNumero de consultas: %d\n",contadorLectores);
@@ -423,7 +420,7 @@ void *escritor(void *threadArgs){
 
         sleep(3);
 
-        sem_wait(&sem_procesos_permitidos_en_SC);
+        sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
         procesos_permitidos_en_SC--;
         if(procesos_permitidos_en_SC==0) {
             sem_post(&sem_procesos_permitidos_en_SC);
