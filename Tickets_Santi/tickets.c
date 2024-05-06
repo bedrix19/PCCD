@@ -9,7 +9,7 @@
 #include <sys/msg.h>
 #include <time.h> //para el rand
 
-#define MAX_PROCESOS 4
+#define MAX_PROCESOS 10
 #define MAX_NODOS 4
 #define NUM_PRIORIDADES 3
 #define SOLICITUD 1
@@ -92,21 +92,21 @@ void dar_SC(int ticket) {
 }
 
 void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
-    printf("\n[Proceso %d]=> Solicitando SC\n",num_proceso);
+    printf("[Proceso %d] => Solicitando SC\n",num_proceso);
     while(1) {
         sem_wait(&sem_estoy_SC_y_quiero);
         quiero = 1;
         sem_post(&sem_estoy_SC_y_quiero);
 
-        sem_wait(&sem_mi_prioridad); printf("\n[Proceso %d]=> paso sem_mi_prioridad\n",num_proceso);
-        printf("\n[Proceso %d]=>prioridad actual: %d\n",num_proceso, mi_prioridad);
+        sem_wait(&sem_mi_prioridad); //printf("\n[Proceso %d]=> paso sem_mi_prioridad\n",num_proceso);
+        //printf("\n[Proceso %d]=>prioridad actual: %d\n",num_proceso, mi_prioridad);
         if (prioridad_solicitud > mi_prioridad){
             if(mi_prioridad!=0) {
                 confirmaciones = 0;
                 flag_pedir_otra_vez[mi_prioridad-1]=1;
                 sem_post(&semaforos_de_paso[mi_prioridad-1]);
             }
-            mi_prioridad = prioridad_solicitud; printf("\n[Proceso %d]=> mi_prioridad: %d\n",num_proceso,mi_prioridad);
+            mi_prioridad = prioridad_solicitud; //printf("\n[Proceso %d]=> mi_prioridad: %d\n",num_proceso,mi_prioridad);
             sem_post(&sem_mi_prioridad);
         } else {
             sem_post(&sem_mi_prioridad);
@@ -118,7 +118,7 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
         // Preparamos las solicitudes
         sem_wait(&sem_tickets);
         mi_ticket = max_ticket + 1;
-        printf("\n[Proceso %d]=>ticket actual: %d\n",num_proceso, mi_ticket);
+        //printf("\n[Proceso %d] => ticket actual: %d\n",num_proceso, mi_ticket);
         vector_peticiones[prioridad_solicitud-1] = mi_ticket;
         mssg_ticket solicitud;
         size_t buf_length = sizeof(mssg_ticket) - sizeof(int); //tamaño del mensaje - mtype
@@ -131,7 +131,9 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
             if (i==mi_id) continue;
             if (msgsnd(msqid_nodos[i], &solicitud, buf_length, IPC_NOWAIT) < 0)
                 printf("\nError con msgsnd solicitando SC a los nodos: %s\n", strerror(errno));
-            else printf("Se envió la solicitud: [destino: %d, ticket: %d, prioridad: %d, flag consultas: %d]\n", i, solicitud.ticket_origen, solicitud.prioridad_origen, flag_consulta);
+            else {
+                //printf("Se envió la solicitud: [destino: %d, ticket: %d, prioridad: %d, flag consultas: %d]\n", i, solicitud.ticket_origen, solicitud.prioridad_origen, flag_consulta);
+            }
         }
         sem_post(&sem_tickets);
 
@@ -169,7 +171,7 @@ void liberar_SC() {
         confirmacion.mtype = CONFIRMACION;
         confirmacion.id_nodo_origen = mi_id;
             for (int i = 0; i < nodos_pendientes_count; i++) {
-                printf("Confirmamos al ticket: %d del nodo: %d",ticket_nodos_pend[i],id_nodos_pend[i]);
+                printf("Confirmamos al ticket: %d del nodo: %d\n",ticket_nodos_pend[i],id_nodos_pend[i]);
                 confirmacion.ticket_origen = ticket_nodos_pend[i];
                 if (msgsnd(msqid_nodos[id_nodos_pend[i]], &confirmacion, buf_length, IPC_NOWAIT) < 0) {
                     printf("\nid del nodo: %d",id_nodos_pend[i]);
@@ -206,16 +208,18 @@ void *receiver(void *arg) {
 
     while (1) {
         int nodo_destino;
-        printf("\nEsperando recibir mensajes\n");
+        //printf("\nEsperando recibir mensajes\n");
         if(msgrcv(*msqid, (void *)&mensaje, buf_length, 0, 0) < 0){
             printf("\nError con msgrcv: %s\n", strerror(errno));
             exit(1);
         } else {
             if(mensaje.mtype == SOLICITUD){
                 nodo_destino = mensaje.id_nodo_origen;
-                printf("\nRecibí una solicitud con ticket igual a %d\n",mensaje.ticket_origen);
+                //printf("\nRecibí una solicitud con ticket igual a %d\n",mensaje.ticket_origen);
             }
-            if(mensaje.mtype == CONFIRMACION) printf("\nRecibí una confirmacion con ticket igual a %d\n",mensaje.ticket_origen);
+            if(mensaje.mtype == CONFIRMACION) {
+                //printf("\nRecibí una confirmacion con ticket igual a %d\n",mensaje.ticket_origen);
+            }
         }
         sem_wait(&sem_tickets);  //printf("paso sem_tickets ");
         sem_wait(&sem_mi_prioridad); //printf("paso sem_mi_prioridad ");
@@ -241,7 +245,7 @@ void *receiver(void *arg) {
         //sem_wait(&sem_mi_prioridad);
         sem_wait(&sem_ProtegeLectores); //printf("paso sem_ProtegeLectores ");
         if (mensaje.mtype == SOLICITUD && !quiero) {
-            printf("\nRespondemos, porque no queremos SC");
+            //printf("Respondemos, porque no queremos SC.\n");
             mensaje.mtype = CONFIRMACION;
             mensaje.id_nodo_origen = mi_id;
             // mensaje.ticket_origen = mensaje.ticket_origen;
@@ -249,13 +253,13 @@ void *receiver(void *arg) {
                 printf("\nError con msgsnd respondiendo a una solicitud: %s\n", strerror(errno));
         } else if (mensaje.mtype == SOLICITUD && quiero && !estoy_SC) {
             if (mensaje.prioridad_origen > mi_prioridad) {
-                printf("\nRespondemos, porque tiene una prioridad mayor");
+                //printf("Respondemos, porque tiene una prioridad mayor.\n");
                 // Aquí se implementa el envío de confirmación para una peticion mas prioritaria
                 mensaje.mtype = CONFIRMACION;
                 mensaje.id_nodo_origen = mi_id;
                 // mensaje.ticket_origen = mensaje.ticket_origen;
                 if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
-                    printf("\nError con msgsnd respondiendo a una solicitud más prioritaria: %s\n", strerror(errno));
+                    //printf("\nError con msgsnd respondiendo a una solicitud más prioritaria: %s\n", strerror(errno));
 
                 // como es una solicitud con prioridad mayor debemos enviar el nuestro otra vez
                 sem_wait(&sem_flag_pedir_again);
@@ -267,7 +271,7 @@ void *receiver(void *arg) {
                 }
                 sem_post(&sem_flag_pedir_again);
             } else if (mensaje.prioridad_origen == mi_prioridad && (mensaje.ticket_origen < mi_ticket || (mensaje.ticket_origen == mi_ticket && mensaje.id_nodo_origen < mi_id))) {
-                printf("\nRespondemos, porque es un nodo más prioritario");
+                //printf("Respondemos, porque es un nodo más prioritario.\n");
                 // Aquí se implementa el envío de confirmación para un nodo mas prioritario
                 mensaje.mtype = CONFIRMACION;
                 mensaje.id_nodo_origen = mi_id;
@@ -275,7 +279,7 @@ void *receiver(void *arg) {
                 if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                     printf("\nError con msgsnd respondiendo a un nodo más prioritario: %s\n", strerror(errno));
             } else {
-                printf("\nAlmacenamos la solicitud");
+                //printf("Almacenamos la solicitud.\n");
                 // Aquí se implementa la lógica de almacenamiento de nodos pendientes
                 sem_wait(&sem_nodos_pendientes_count);
                 flag_solicitudes_pendientes = 1;
@@ -296,7 +300,7 @@ void *receiver(void *arg) {
                 sem_post(&sem_nodos_pendientes_count);
             }
         } else if (mensaje.mtype == SOLICITUD && estoy_SC && mensaje.flag_consulta && SC_consultas) {
-            printf("\nRespondemos, porque es una consulta y estamos en SC con consultas");
+            //printf("Respondemos, porque es una consulta y estamos en SC con consultas.\n");
             //sem_post(&sem_ProtegeLectores);
             // Aquí se implementa el envío de confirmación para una peticion para una Consulta
             mensaje.mtype = CONFIRMACION;
@@ -305,7 +309,7 @@ void *receiver(void *arg) {
             if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                 printf("\nError con msgsnd a solicitudes de Consultas y yo estoy en SC consultas: %s\n", strerror(errno));
         } else {
-            printf("\nAlmacenamos la solicitud");
+            //printf("Almacenamos la solicitud.\n");
             // Aquí se implementa la lógica de almacenamiento de nodos pendientes
             sem_wait(&sem_nodos_pendientes_count);
             flag_solicitudes_pendientes = 1;
@@ -338,13 +342,13 @@ void *lector(void *threadArgs){
     int prioridad = args->prioridad;
     int nro_proceso = args->nro_proceso;
     while(1){
-        printf("\n[Proceso %d]=>Esperando poder solicitar SC\n", nro_proceso);
+        printf("[Proceso %d] => Esperando poder solicitar SC\n", nro_proceso);
         sem_wait(&sem_solicitar_SC[nro_proceso]);                      //Esperamos a que nos den paso desde el main
-        printf("\n[Proceso %d]=>Pidiendo SC...\n", nro_proceso);
+        printf("[Proceso %d] => Pidiendo SC...\n", nro_proceso);
         sem_wait(&sem_exclusion_peticiones[0]);
         solicitar_SC(nro_proceso,prioridad,1);
         sem_post(&sem_exclusion_peticiones[0]);
-        printf("\n[Proceso %d]=>Dentro de SC...\n", nro_proceso);
+        printf("[Proceso %d] => Dentro de SC...\n", nro_proceso);
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
         contadorLectores ++;
         if (contadorLectores == 1){
@@ -354,16 +358,21 @@ void *lector(void *threadArgs){
         }
         sem_post(&sem_ProtegeLectores);
         sleep(7);
-        printf("\n[Proceso %d]=>Saliendo SC...\n", nro_proceso);
+        printf("[Proceso %d] => Saliendo SC...\n", nro_proceso);
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
         contadorLectores --;
+
         if (contadorLectores == 0){
-            //printf("\nnumero de consultas: %d",contadorLectores);
+        
+            printf("\nNumero de consultas: %d\n",contadorLectores);
             liberar_SC();
             SC_consultas = 0;
             sem_post(&sem_exclusionMutuaEscritor);
+        
         }
+        
         sem_post(&sem_ProtegeLectores);
+        
         //sem_wait(&semaforos_de_paso[nro_proceso]);
     }
 }
@@ -373,24 +382,24 @@ void *escritor(void *threadArgs){
     int prioridad = args->prioridad;
     int nro_proceso = args->nro_proceso;
     while(1){
-        printf("\n[Proceso %d]=>Esperando poder solicitar SC\n", nro_proceso);
+        printf("[Proceso %d] => Esperando poder solicitar SC\n", nro_proceso);
         sem_wait(&sem_solicitar_SC[nro_proceso]);                      //Esperamos a que nos den paso desde el main
-        printf("\n[Proceso %d]=>Pidiendo SC...\n", nro_proceso);
+        printf("[Proceso %d] => Pidiendo SC...\n", nro_proceso);
         sem_wait(&sem_exclusion_peticiones[prioridad-1]);
         solicitar_SC(nro_proceso,prioridad,0);
         sem_post(&sem_exclusion_peticiones[prioridad-1]);
         sem_wait(&sem_exclusionMutuaEscritor);                          //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
-        printf("\n[Proceso %d]=>Dentro de SC...\n", nro_proceso);
+        printf("[Proceso %d] => Dentro de SC...\n", nro_proceso);
         sleep(7);
         liberar_SC();
-        printf("\n[Proceso %d]=>Saliendo de SC...\n", nro_proceso);
+        printf("[Proceso %d] => Saliendo de SC...\n", nro_proceso);
         sem_post(&sem_exclusionMutuaEscritor);
     }
 }
 
 int main(int argc, char *argv[]){
     if(argc != 2){
-        printf("Uso: %s <Número de nodo> <xd>\n", argv[0]);
+        printf("Uso: %s <Número de nodo>\n", argv[0]);
         printf("Primer nodo = 0 y el último = %d\n",MAX_NODOS-1);
         return 1;
     }
@@ -458,6 +467,10 @@ int main(int argc, char *argv[]){
     pthread_t hilos_servidores[MAX_PROCESOS];
     struct arg_servidor parametros;
     int opcion, proceso=0;
+
+    // Inicializacion de la semilla.
+    srand(time(NULL));
+
     do {
         /******* Menú de opciones *******/
         /*
@@ -480,31 +493,31 @@ int main(int argc, char *argv[]){
                 parametros.prioridad = 1;
                 if ((pthread_create(&hilos_servidores[proceso], NULL, lector, (void *)&parametros)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("\t[%d] Consulta creado",proceso);
+                else printf("\t[%d] Consulta creado.\t\t",proceso);
                 break;
             case 2: 
                 parametros.prioridad = 1;
                 if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, (void *)&parametros)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("\t[%d] Reserva creado",proceso);
+                else printf("\t[%d] Reserva creado.\t\t",proceso);
                 break;
             case 3: 
                 parametros.prioridad = 2;
                 if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, (void *)&parametros)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("\t[%d] Pago creado",proceso);
+                else printf("\t[%d] Pago creado.\t\t",proceso);
                 break;
             case 4: 
                 parametros.prioridad = 2;
                 if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, (void *)&parametros)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("\t[%d] Administración creado",proceso);
+                else printf("\t[%d] Administración creado.\t",proceso);
                 break;
             case 5: 
                 parametros.prioridad = 3;
                 if ((pthread_create(&hilos_servidores[proceso], NULL, escritor, (void *)&parametros)) < 0)//aqui
                     printf("Error con pthread_create: %s\n", strerror(errno));
-                else printf("\t[%d] Anulaciones creado",proceso);
+                else printf("\t[%d] Anulaciones creado.\t\t",proceso);
                 break;
             default:
                 printf("Error con la elección\n");
@@ -517,7 +530,7 @@ int main(int argc, char *argv[]){
     pthread_t hilo_receptor;
     if ((pthread_create(&hilo_receptor, NULL, receiver, (void *)&msqid_nodos[mi_id])) < 0)
         printf("Error con pthread_create: %s\n", strerror(errno));
-    else printf("Receiver creado\n");
+    else printf("\n\tReceiver creado.\n");
 
     //menú para pedir SC
     while (1) {
@@ -527,6 +540,7 @@ int main(int argc, char *argv[]){
         printf ("\t[1] Introducir un proceso en la SC.\n");
         //printf ("\t[2] Quitar un proceso de la SC.\n");
         printf ("\t[3] Salir del programa.\n");
+        printf ("\t[4] Introducir una secuencia de procesos.\n");
         printf("\n\tIngrese una opcion: ");
 
         scanf ("%i", &opcion);
