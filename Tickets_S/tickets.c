@@ -507,7 +507,7 @@ void* receive () {
 
             // Guardamos la peticion en la cola de pendientes
 
-            printf ("PendientesMenosPrioritarios: %i\n", pendientesMenosPrioritarios);
+            //printf ("PendientesMenosPrioritarios: %i\n", pendientesMenosPrioritarios);
 
             colaNodosMenosPrioritarios [pendientesMenosPrioritarios] = mensajeIn.idOrigen;
             
@@ -516,7 +516,7 @@ void* receive () {
         }
         else if ( (enSC == 1) || ( (quieroEntrar == 1) && (prioridad <= mensajeIn.priority) ) ) {
 
-            printf("PendientesMasPrioritarios: %i\n", pendientes);
+            //printf("PendientesMasPrioritarios: %i\n", pendientes);
 
             colaNodosMasPrioritarios  [pendientes] = mensajeIn.idOrigen;
             
@@ -546,7 +546,7 @@ void* receive () {
 
                 }
 
-                printf ("Confirmacion enviada 1.\n\n");
+                //printf ("Confirmacion enviada 1.\n\n");
 
             } while (error != 0);
 
@@ -574,7 +574,7 @@ void* receive () {
 
                 }
 
-                printf ("Confirmacion enviada 2.\n\n");
+                //printf ("Confirmacion enviada 2.\n\n");
 
             } while (error != 0);
 
@@ -599,36 +599,6 @@ void* funcionProceso (datosHilo* entrada) {
         // Semaforo Contador (Veces que puede acceder a la seccion critica)
         //sem_wait (&contSC);
         sem_wait (&exclusionMutua);
-
-        // Quiero entrar a la seccion critica
-
-        switch (entrada->tipoProceso) {
-
-            case 1:
-                procesosConsultas++;
-                break;
-
-            case 2:
-                procesosReservas++;
-                break;
-            
-            case 3: 
-                procesosPagos++;
-                break;
-
-            case 4:
-                procesosAdmin++;
-                break;
-            
-            case 5:
-                procesosAnulaciones++;
-                break;
-
-            default:
-                printf ("\nError\n");
-                exit(-1);
-                break;
-        }
         
         esperandoSC++;
 
@@ -686,10 +656,10 @@ void* funcionProceso (datosHilo* entrada) {
             
             prioridad = entrada->priority;
 
-            printf ("[H: %i, P: %i] - No envio mensajes.\n", entrada->numeroHilo, entrada->priority);
+            //printf ("[H: %i, P: %i] - No envio mensajes.\n", entrada->numeroHilo, entrada->priority);
 
             sem_wait (&entradaSC);
-
+            
         }
 
         
@@ -706,12 +676,14 @@ void* funcionProceso (datosHilo* entrada) {
 
         prioridad = 0;
 
+        
+
         printf ("[H: %i, P: %i] - %ld - Saliendo de la SC.\n", entrada->numeroHilo, entrada->priority, time(NULL));
         sem_wait(&exclusionMutua);
 
         enSC--;
 
-        if (esperandoSC == 0) {
+        if ( (esperandoSC == 0) ) {
 
             sem_post (&exclusionMutua);
 
@@ -801,10 +773,11 @@ void* funcionProceso (datosHilo* entrada) {
             }
             */
 
-            printf ("[H: %i, P: %i] - Se han confirmado %i mensajes.\n", entrada->numeroHilo, entrada->priority, i);
+            //printf ("[H: %i, P: %i] - Se han confirmado %i mensajes.\n", entrada->numeroHilo, entrada->priority, i);
 
         }
         else {
+            // if (procesosMasPrioritarios > 0)
 
             sem_post (&exclusionMutua);
             sem_post (&entradaSC);
