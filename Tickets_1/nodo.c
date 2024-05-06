@@ -388,7 +388,7 @@ void *escritor(void *threadArgs){
 
 int main(int argc, char *argv[]){
     if(argc != 2){
-        printf("Uso: %s <Número de nodo> <xd>\n", argv[0]);
+        printf("Uso: %s <Número de nodo>\n", argv[0]);
         printf("Primer nodo = 0 y el último = %d\n",MAX_NODOS-1);
         return 1;
     }
