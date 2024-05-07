@@ -1,13 +1,16 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
+#include <sys/time.h>
+#include <math.h>
+#include <sys/msg.h>
+#include <sys/ipc.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <limits.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
-#include <sys/msg.h>
-#include <time.h> //para el rand
 
 #define MAX_PROCESOS 10
 #define MAX_NODOS 4
@@ -84,6 +87,73 @@ sem_t sem_tickets;
 int MAX(int a, int b) {
     return (a > b) ? a : b;
 }
+
+//Funciones para medir:
+char nombreArchivo[50];
+char nombreArchivo2[50];
+int crearTXT(){
+    FILE *archivo;
+    FILE *archivo2;
+
+    strcpy(nombreArchivo, "TiempoVidaNodo");
+    char ID[50];
+    sprintf(ID, "%d",mi_id);
+    strcat(nombreArchivo, ID);
+    strcat(nombreArchivo,".txt");
+    archivo=fopen(nombreArchivo,"w");
+    if (archivo == NULL) {
+        printf("Error abriendo el archivo.\n");
+        return 0;
+    }
+    //fprintf(archivo,"ID NODO    TIPO DE PROCESO     TIEMPO DE EJECUCIÓN     TIEMPO DE ESPERA SC");
+    fclose(archivo);
+
+    strcpy(nombreArchivo2, "TiempoNoSC");
+    char ID2[50];
+    sprintf(ID2, "%d",mi_id);
+    strcat(nombreArchivo2, ID);
+    strcat(nombreArchivo2,".txt");
+    archivo=fopen(nombreArchivo2,"w");
+    if (archivo == NULL) {
+        printf("Error abriendo el archivo.\n");
+        return 0;
+    }
+    fclose(archivo);
+    return 0;
+}
+
+int cubrirArchivo(int miID, int tipoProceso, long tiempoEjec){
+    FILE *archivo;
+
+    archivo = fopen(nombreArchivo, "a");
+    fprintf(archivo, "%i  %ld\n", tipoProceso, tiempoEjec);
+    fclose(archivo);
+    return 0;
+}
+int cubrirArchivo2(int miID, int tipoProceso, long tiempoNoSC){
+    FILE *archivo2;
+
+    archivo2 = fopen(nombreArchivo2, "a");
+    fprintf(archivo2, "%i  %ld\n", tipoProceso, tiempoNoSC);
+    fclose(archivo2);
+    return 0;
+}
+struct timeval timestamp(){
+    struct timeval tiempoActual;
+    gettimeofday(&tiempoActual, NULL);
+    return tiempoActual;
+}
+long restaTiempos (struct timeval t1, struct timeval t2){
+    long long resta = t1.tv_sec - t2.tv_sec;
+        printf("\n\nT1-1 %ld\n\n",t1.tv_sec);
+    return resta;
+}
+/*long restaTiempos2 (struct timeval t1, struct timeval t2, struct timeval t3){
+    long restaPrevia = t2.tv_sec - t3.tv_sec;
+    long resta = t1.tv_sec - restaPrevia;
+    printf("\n\nT1 %ld\n\n",t1.tv_sec);
+    return resta;
+}*/
 
 void dar_SC(int ticket) {
     for (int i = 0; i < NUM_PRIORIDADES; i++) {
@@ -350,10 +420,17 @@ void *receiver(void *arg) {
         sem_post(&sem_estoy_SC_y_quiero);
         sem_post(&sem_mi_prioridad);
         sem_post(&sem_tickets);
+        
     }
 }
 
 void *lector(void *threadArgs){
+    //Structs para medir
+    struct timeval tiempoInicioEjecucion;
+    struct timeval tiempoFinEjecucion;
+    struct timeval tiempoEntradaSC;
+    //struct timeval tiempoSalidaSC;
+    tiempoInicioEjecucion = timestamp();
     //args: prioridad, nro_proceso, sem_sinc
     struct arg_servidor *args = threadArgs;
     int prioridad = args->prioridad;
@@ -364,6 +441,7 @@ void *lector(void *threadArgs){
         sem_wait(&sem_exclusion_peticiones[0]);
         solicitar_SC(nro_proceso,prioridad,1);
         sem_post(&sem_exclusion_peticiones[0]);
+        tiempoEntradaSC = timestamp();
         printf("\n[Proceso %d]=>Dentro de SC...", nro_proceso);
 
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
@@ -378,8 +456,8 @@ void *lector(void *threadArgs){
             sem_post(&sem_procesos_permitidos_en_SC);
         sem_post(&sem_ProtegeLectores);
 
-        sleep(3);
-
+        sleep(0.1);
+        //tiempoSalidaSC=timestamp();
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
             contadorLectores--;
             sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
@@ -395,12 +473,20 @@ void *lector(void *threadArgs){
             } else sem_post(&sem_procesos_permitidos_en_SC);
             printf("\n[Proceso %d]=>Saliendo SC... ", nro_proceso);
         sem_post(&sem_ProtegeLectores);
-        
+        tiempoFinEjecucion=timestamp();
+        cubrirArchivo(mi_id, prioridad, restaTiempos(tiempoFinEjecucion,tiempoInicioEjecucion));
+        //cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC));
         //sem_wait(&semaforos_de_paso[nro_proceso]);
     }
 }
 
 void *escritor(void *threadArgs){
+    //Structs para medir
+    struct timeval tiempoInicioEjecucion;
+    struct timeval tiempoFinEjecucion;
+    struct timeval tiempoEntradaSC;
+    //struct timeval tiempoSalidaSC;
+    tiempoInicioEjecucion = timestamp();
     struct arg_servidor *args = threadArgs;
     int prioridad = args->prioridad;
     int nro_proceso = args->nro_proceso;
@@ -416,10 +502,11 @@ void *escritor(void *threadArgs){
 
         sem_post(&sem_exclusion_peticiones[prioridad-1]);
         sem_wait(&sem_exclusionMutuaEscritor);                         //Como el rcv manda peticiones mientras estamos en SC hay que poner un semáforo de Exclusión mutua
+        tiempoEntradaSC = timestamp();
         printf("\n[Proceso %d]=>Dentro de SC...", nro_proceso);
 
-        sleep(3);
-
+        sleep(0.1);
+        //tiempoSalidaSC=timestamp();
         sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
         procesos_permitidos_en_SC--;
         if(procesos_permitidos_en_SC==0) {
@@ -428,6 +515,11 @@ void *escritor(void *threadArgs){
         } else sem_post(&sem_procesos_permitidos_en_SC);
         printf("\n[Proceso %d]=>Saliendo de SC... ", nro_proceso);
         sem_post(&sem_exclusionMutuaEscritor);
+        tiempoFinEjecucion = timestamp();
+        cubrirArchivo(mi_id, prioridad, restaTiempos(tiempoFinEjecucion,tiempoInicioEjecucion));
+        //cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC));
+
+
     }
 }
 
@@ -505,7 +597,7 @@ int main(int argc, char *argv[]){
 
     // Inicializacion de la semilla.
     srand(time(NULL));
-
+    crearTXT();
     do {
         /******* Menú de opciones *******/
         /*
