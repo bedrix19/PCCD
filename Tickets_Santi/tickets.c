@@ -44,6 +44,7 @@ struct arg_lector {
 } *argsLectores;
 
 int mi_id;
+int ctrMensaje = 0;
 int estoy_SC = 0;
 int quiero = 0;
 int max_ticket = 0;
@@ -91,9 +92,13 @@ int MAX(int a, int b) {
 //Funciones para medir:
 char nombreArchivo[50];
 char nombreArchivo2[50];
+char nombreArchivo3[50];
+char nombreArchivo4[50];
 int crearTXT(){
     FILE *archivo;
     FILE *archivo2;
+    FILE *archivo3;
+    FILE *archivo4;
 
     strcpy(nombreArchivo, "TiempoVidaNodo");
     char ID[50];
@@ -113,12 +118,37 @@ int crearTXT(){
     sprintf(ID2, "%d",mi_id);
     strcat(nombreArchivo2, ID);
     strcat(nombreArchivo2,".txt");
-    archivo=fopen(nombreArchivo2,"w");
-    if (archivo == NULL) {
+    archivo2=fopen(nombreArchivo2,"w");
+    if (archivo2 == NULL) {
         printf("Error abriendo el archivo.\n");
         return 0;
     }
-    fclose(archivo);
+    fclose(archivo2);
+
+ strcpy(nombreArchivo3, "TiempoHastaSC");
+    char ID3[50];
+    sprintf(ID3, "%d",mi_id);
+    strcat(nombreArchivo3, ID3);
+    strcat(nombreArchivo3,".txt");
+    archivo3=fopen(nombreArchivo3,"w");
+    if (archivo3 == NULL) {
+        printf("Error abriendo el archivo.\n");
+        return 0;
+    }
+    fclose(archivo3);
+
+    strcpy(nombreArchivo4, "MensajesNodo");
+    char ID4[50];
+    sprintf(ID4, "%d",mi_id);
+    strcat(nombreArchivo4, ID4);
+    strcat(nombreArchivo4,".txt");
+    archivo4=fopen(nombreArchivo4,"w");
+    if (archivo4 == NULL) {
+        printf("Error abriendo el archivo.\n");
+        return 0;
+    }
+    fclose(archivo4);
+
     return 0;
 }
 
@@ -138,22 +168,42 @@ int cubrirArchivo2(int miID, int tipoProceso, long tiempoNoSC){
     fclose(archivo2);
     return 0;
 }
+
+int cubrirArchivo3(int miID, int tipoProceso, long tiempoHastaSC){
+    FILE *archivo3;
+
+    archivo3 = fopen(nombreArchivo3, "a");
+    fprintf(archivo3, "%i  %ld\n", tipoProceso, tiempoHastaSC);
+    fclose(archivo3);
+    return 0;
+}
+
+int cubrirArchivo4(int miID, int mensajes){
+    FILE *archivo4;
+
+    archivo4 = fopen(nombreArchivo4, "a");
+    fprintf(archivo4, "%i  %i\n",miID, mensajes);
+    fclose(archivo4);
+    return 0;
+}
+
 struct timeval timestamp(){
     struct timeval tiempoActual;
     gettimeofday(&tiempoActual, NULL);
     return tiempoActual;
 }
 long restaTiempos (struct timeval t1, struct timeval t2){
-    long long resta = t1.tv_sec - t2.tv_sec;
-        printf("\n\nT1-1 %ld\n\n",t1.tv_sec);
+    long resta = t1.tv_sec - t2.tv_sec;
+        //printf("\n\nT2-1 %ld\n\n",t2.tv_sec);
     return resta;
 }
-/*long restaTiempos2 (struct timeval t1, struct timeval t2, struct timeval t3){
-    long restaPrevia = t2.tv_sec - t3.tv_sec;
-    long resta = t1.tv_sec - restaPrevia;
-    printf("\n\nT1 %ld\n\n",t1.tv_sec);
+long restaTiempos2 (struct timeval t1, struct timeval t2, struct timeval t3, struct timeval t4){
+    long finEjec = t1.tv_sec - t4.tv_sec;
+    long salidaSC = t2.tv_sec - t4.tv_sec;
+    long entradaSC = t3.tv_sec - t4.tv_sec;
+    long resta = finEjec- (salidaSC-entradaSC);
     return resta;
-}*/
+}
 
 void dar_SC(int ticket) {
     for (int i = 0; i < NUM_PRIORIDADES; i++) {
@@ -206,6 +256,7 @@ void solicitar_SC(int num_proceso, int prioridad_solicitud, int flag_consulta) {
             if (msgsnd(msqid_nodos[i], &solicitud, buf_length, IPC_NOWAIT) < 0)
                 printf("\nError con msgsnd solicitando SC a los nodos: %s\n", strerror(errno));
             else {
+                ctrMensaje ++;
                 //printf("Se envió la solicitud: [destino: %d, ticket: %d, prioridad: %d, flag consultas: %d]\n", i, solicitud.ticket_origen, solicitud.prioridad_origen, flag_consulta);
             }
         }
@@ -250,6 +301,7 @@ void liberar_SC() {
             for (int i = 0; i < nodos_pendientes_count; i++) {
                 printf("\n\tConfirmamos al nodo %d con ticket %d",id_nodos_pend[i],ticket_nodos_pend[i]);
                 confirmacion.ticket_origen = ticket_nodos_pend[i];
+                ctrMensaje ++;
                 if (msgsnd(msqid_nodos[id_nodos_pend[i]], &confirmacion, buf_length, IPC_NOWAIT) < 0) {
                     printf("\nid del nodo: %d",id_nodos_pend[i]);
                     printf("\nError con msgsnd respondiendo solicitudes después de SC: %s\n", strerror(errno));
@@ -338,6 +390,7 @@ void *receiver(void *arg) {
             mensaje.mtype = CONFIRMACION;
             mensaje.id_nodo_origen = mi_id;
             // mensaje.ticket_origen = mensaje.ticket_origen;
+            ctrMensaje ++;
             if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                 printf("\nError con msgsnd respondiendo a una solicitud: %s\n", strerror(errno));
         } else if (mensaje.mtype == SOLICITUD && quiero && !estoy_SC) {
@@ -346,6 +399,7 @@ void *receiver(void *arg) {
                 mensaje.mtype = CONFIRMACION;
                 mensaje.id_nodo_origen = mi_id;
                 // mensaje.ticket_origen = mensaje.ticket_origen;
+                ctrMensaje ++;
                 if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                     //printf("\nError con msgsnd respondiendo a una solicitud más prioritaria: %s\n", strerror(errno));
                 // como es una solicitud con prioridad mayor debemos enviar el nuestro otra vez
@@ -363,6 +417,7 @@ void *receiver(void *arg) {
                 mensaje.mtype = CONFIRMACION;
                 mensaje.id_nodo_origen = mi_id;
                 // mensaje.ticket_origen = mensaje.ticket_origen;
+                ctrMensaje ++;
                 if (msgsnd(msqid_nodos[nodo_destino], &mensaje, buf_length, IPC_NOWAIT) < 0)
                     printf("\nError con msgsnd respondiendo a un nodo más prioritario: %s\n", strerror(errno));
             } else {
@@ -429,7 +484,7 @@ void *lector(void *threadArgs){
     struct timeval tiempoInicioEjecucion;
     struct timeval tiempoFinEjecucion;
     struct timeval tiempoEntradaSC;
-    //struct timeval tiempoSalidaSC;
+    struct timeval tiempoSalidaSC;
     tiempoInicioEjecucion = timestamp();
     //args: prioridad, nro_proceso, sem_sinc
     struct arg_servidor *args = threadArgs;
@@ -456,8 +511,8 @@ void *lector(void *threadArgs){
             sem_post(&sem_procesos_permitidos_en_SC);
         sem_post(&sem_ProtegeLectores);
 
-        sleep(0.1);
-        //tiempoSalidaSC=timestamp();
+        sleep(5);
+        tiempoSalidaSC=timestamp();
         sem_wait(&sem_ProtegeLectores);  //sem(0,1) para cambiar el valor de SC_consultas en exclusión mutua
             contadorLectores--;
             sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
@@ -475,7 +530,8 @@ void *lector(void *threadArgs){
         sem_post(&sem_ProtegeLectores);
         tiempoFinEjecucion=timestamp();
         cubrirArchivo(mi_id, prioridad, restaTiempos(tiempoFinEjecucion,tiempoInicioEjecucion));
-        //cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC));
+        cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC, tiempoInicioEjecucion));
+        cubrirArchivo3(mi_id, prioridad, restaTiempos(tiempoEntradaSC, tiempoInicioEjecucion));
         //sem_wait(&semaforos_de_paso[nro_proceso]);
     }
 }
@@ -485,7 +541,7 @@ void *escritor(void *threadArgs){
     struct timeval tiempoInicioEjecucion;
     struct timeval tiempoFinEjecucion;
     struct timeval tiempoEntradaSC;
-    //struct timeval tiempoSalidaSC;
+    struct timeval tiempoSalidaSC;
     tiempoInicioEjecucion = timestamp();
     struct arg_servidor *args = threadArgs;
     int prioridad = args->prioridad;
@@ -505,8 +561,8 @@ void *escritor(void *threadArgs){
         tiempoEntradaSC = timestamp();
         printf("\n[Proceso %d]=>Dentro de SC...", nro_proceso);
 
-        sleep(0.1);
-        //tiempoSalidaSC=timestamp();
+        sleep(5);
+        tiempoSalidaSC=timestamp();
         sem_wait(&sem_procesos_permitidos_en_SC); printf("\n[Proceso %d]=>pase sem_procesos_permitidos_en_SC", nro_proceso);
         procesos_permitidos_en_SC--;
         if(procesos_permitidos_en_SC==0) {
@@ -517,8 +573,8 @@ void *escritor(void *threadArgs){
         sem_post(&sem_exclusionMutuaEscritor);
         tiempoFinEjecucion = timestamp();
         cubrirArchivo(mi_id, prioridad, restaTiempos(tiempoFinEjecucion,tiempoInicioEjecucion));
-        //cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC));
-
+        cubrirArchivo2(mi_id, prioridad, restaTiempos2(tiempoFinEjecucion, tiempoSalidaSC, tiempoEntradaSC, tiempoInicioEjecucion));
+        cubrirArchivo3(mi_id, prioridad, restaTiempos(tiempoEntradaSC, tiempoInicioEjecucion));
 
     }
 }
@@ -689,6 +745,7 @@ int main(int argc, char *argv[]){
                 if (msgctl(msqid_nodos[mi_id], IPC_RMID, NULL) == -1) perror("Error al eliminar la cola de mensajes");
                 free(id_nodos_pend);
                 free(ticket_nodos_pend);
+                cubrirArchivo4(mi_id, ctrMensaje);
                 return 0;
 
             case 4:

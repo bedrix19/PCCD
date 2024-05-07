@@ -13,7 +13,7 @@ def cargar_datos(nombre_archivo):
     return x, y
 
 # Cargar los datos de los archivos
-archivos = ['TiempoNoSC0.txt', 'TiempoNoSC1.txt', 'TiempoNoSC2.txt', 'TiempoNoSC3.txt']
+archivos = ['TiempoHastaSC0.txt', 'TiempoHastaSC1.txt', 'TiempoHastaSC2.txt', 'TiempoHastaSC3.txt']
 nombres = ['Nodo 0', 'Nodo 1', 'Nodo 2', 'Nodo 3']
 etiquetas_x = ['Consultas y reservas', 'Pagos y administración', 'Anulaciones']
 colores = ['b', 'g', 'r', 'c']
@@ -26,7 +26,7 @@ for nombre, archivo, color in zip(nombres, archivos, colores):
 
 plt.xlabel('Prioridades')
 plt.ylabel('Y')
-plt.title('Tiempo de No SC')
+plt.title('Tiempo Hasta SC')
 plt.grid(True)
 plt.xticks(range(1, len(etiquetas_x) + 1), etiquetas_x)
 
@@ -38,6 +38,6 @@ medias = [np.mean(cargar_datos(archivo)[1]) for archivo in archivos]
 plt.bar(nombres, medias, color=colores)
 plt.xlabel('Nodos')
 plt.ylabel('Tiempo medio (s)')
-plt.title('Tiempo medio de no SC por nodo')
+plt.title('Tiempo medio Hasta SC por nodo')
 
 plt.show()
